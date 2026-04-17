@@ -1,10 +1,321 @@
 ﻿<!DOCTYPE html>
-<html>
+<html lang="pl">
 <head>
-    <meta charset="utf-8" />
-    <title></title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contact Manager SPA</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 40px;
+            line-height: 1.6;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        section {
+            border: 1px solid #ddd;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            background: #f9f9f9;
+        }
+
+        input, select {
+            margin-bottom: 10px;
+            padding: 8px;
+            width: 300px;
+            display: block;
+        }
+
+        button {
+            padding: 10px 15px;
+            cursor: pointer;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+        }
+
+            button:hover {
+                background: #0056b3;
+            }
+
+        .delete-btn {
+            background: #dc3545;
+            margin-left: 10px;
+        }
+
+        #contacts-list li {
+            margin-bottom: 10px;
+            list-style: none;
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+        }
+    </style>
 </head>
 <body>
 
+    <h2>Contacts</h2>
+
+    <section id="login-section">
+        <h3>Log in</h3>
+        <input type="text" id="user" placeholder="Login (admin)">
+        <input type="password" id="pass" placeholder="Pass (admin123)">
+        <button onclick="login()">Log in</button>
+    </section>
+
+    <section id="admin-panel" class="hidden">
+        <p>Logged in as: <strong>Admin</strong></p>
+        <button onclick="showForm()">Add new contact</button>
+        <button onclick="logout()" style="background:#6c757d">Log out</button>
+    </section>
+
+    <section>
+        <h3>Contact List</h3>
+        <ul id="contacts-list">
+        </ul>
+    </section>
+
+    <section id="form-section" class="hidden">
+        <h3 id="form-title">New Contact</h3>
+        <form id="contact-form">
+            <input type="hidden" id="c-id">
+            <input type="text" id="c-fname" placeholder="First Name" required>
+            <input type="text" id="c-lname" placeholder="Last Name" required>
+            <input type="email" id="c-email" placeholder="Email (unique)" required>
+            <input type="password" id="c-pass" placeholder="Password (min. 8 characters, uppercase, digit)" required>
+
+            <label>Category:</label>
+            <select id="c-cat" onchange="handleCategoryChange()">
+                <option value="Private">Private</option>
+                <option value="Work">Work</option>
+                <option value="Other">Other</option>
+            </select>
+
+            <div id="subcat-area"></div> <input type="text" id="c-phone" placeholder="Phone number">
+            <input type="date" id="c-birth">
+
+            <button type="button" onclick="saveContact()">Save</button>
+            <button type="button" onclick="hideForm()" style="background:#aaa">Cancel</button>
+        </form>
+    </section>
+
+    <script>
+        let token = ""; // jwt placeholder
+
+        // simplified login function
+        async function login() {
+            const u = document.getElementById('user').value;
+            const p = document.getElementById('pass').value;
+
+            const res = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: u, password: p })
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                token = data.token; // jwt
+                document.getElementById('login-section').classList.add('hidden');
+                document.getElementById('admin-panel').classList.remove('hidden');
+                alert("Log in successful.");
+                loadContacts();
+            } else {
+                alert("Error logging in.");
+            }
+        }
+
+        // show contact form
+        function showForm() {
+            document.getElementById('form-section').classList.remove('hidden');
+            document.getElementById('contact-form').reset();
+            document.getElementById('c-id').value = "";
+            document.getElementById('form-title').innerText = "Add new contact";
+        }
+
+        function hideForm() {
+            document.getElementById('form-section').classList.add('hidden');
+        }
+
+        // subcategory handling
+        function handleCategoryChange() {
+            const cat = document.getElementById('c-cat').value;
+            const area = document.getElementById('subcat-area');
+
+            if (cat === "Work") {
+                area.innerHTML = `
+                        <label>Subcategory:</label>
+                        <select id="c-subcat">
+                            <option value="Manager">Manager</option>
+                            <option value="Client">Client</option>
+                            <option value="Worker">Worker</option>
+                        </select>`;
+            } else if (cat === "Other") {
+                area.innerHTML = `<input type="text" id="c-subcat" placeholder="enter category">`;
+            } else {
+                area.innerHTML = "";
+            }
+        }
+
+        // loading data from api
+        async function loadContacts() {
+            try {
+                const res = await fetch('/api/contacts');
+                const data = await res.json();
+                const list = document.getElementById('contacts-list');
+                list.innerHTML = "";
+
+                data.forEach(c => {
+                    const li = document.createElement('li');
+                    li.innerHTML = `
+                            <strong>${c.firstName} ${c.lastName}</strong>
+                            <button onclick="viewDetails(${c.id})">Details/Edit</button>
+                            <button onclick="deleteContact(${c.id})">Delete</button>
+                        `;
+                    list.appendChild(li);
+                });
+            } catch (err) {
+                console.error("Error loading:", err);
+            }
+        }
+
+        async function saveContact() {
+            const id = document.getElementById('c-id').value;
+            const isEditing = id !== ""; // if id not empty -> edit
+
+            const contactData = {
+                id: isEditing ? parseInt(id) : 0,
+                firstName: document.getElementById('c-fname').value,
+                lastName: document.getElementById('c-lname').value,
+                email: document.getElementById('c-email').value,
+                password: document.getElementById('c-pass').value,
+                category: document.getElementById('c-cat').value,
+                subcategory: document.getElementById('c-subcat')?.value || "",
+                phoneNumber: document.getElementById('c-phone').value,
+                birthDate: document.getElementById('c-birth').value
+            };
+
+            const url = isEditing ? `/api/contacts/${id}` : '/api/contacts';
+            const method = isEditing ? 'PUT' : 'POST';
+
+            const response = await fetch(url, {
+                method: method,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + token
+                },
+                body: JSON.stringify(contactData)
+            });
+
+            if (response.ok) {
+                alert(isEditing ? "Contact updated." : "Contact added.");
+                hideForm();
+                loadContacts();
+            } else {
+                const text = await response.text();
+                let msg = "Unknown error";
+
+                try {
+                    const obj = JSON.parse(text);
+                    msg = obj.message || JSON.stringify(obj);
+                } catch (e) {
+                    msg = text;
+                }
+
+                alert("Contact create error: " + msg);
+            }
+        }
+
+        function logout() {
+            token = "";
+            location.reload();
+        }
+
+        async function viewDetails(id) {
+            if (!token) {
+                alert("Need to be logged in to see details.");
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/contacts/${id}`, {
+                    headers: {
+                        'Authorization': 'Bearer ' + token
+                    }
+                });
+
+                if (!res.ok) throw new Error("Error loading details.");
+
+                const c = await res.json();
+
+                // edit form
+                document.getElementById('form-section').classList.remove('hidden');
+                document.getElementById('form-title').innerText = "Contact edit: " + c.firstName + " " + c.lastName;
+
+                // fill form with data from db
+                document.getElementById('c-id').value = c.id; // hidden id
+                document.getElementById('c-fname').value = c.firstName;
+                document.getElementById('c-lname').value = c.lastName;
+                document.getElementById('c-email').value = c.email;
+                document.getElementById('c-pass').value = c.password;
+                document.getElementById('c-phone').value = c.phoneNumber || "";
+
+                // dob to (YYYY-MM-DD)
+                if (c.birthDate) {
+                    document.getElementById('c-birth').value = c.birthDate.split('T')[0];
+                }
+
+                // handling category and subcategory
+                document.getElementById('c-cat').value = c.category;
+                handleCategoryChange(); //show subcategory field
+
+                // waiting for subcategory field
+                setTimeout(() => {
+                    const subcatElem = document.getElementById('c-subcat');
+                    if (subcatElem) subcatElem.value = c.subcategory || "";
+                }, 50);
+
+            } catch (err) {
+                alert(err.message);
+            }
+        }
+
+        async function deleteContact(id) {
+            if (!confirm("Delete contact?")) {
+                return;
+            }
+
+            if (!token) {
+                alert("Need to be logged in to delete contact.");
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/contacts/${id}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': 'Bearer ' + token
+                    }
+                });
+
+                if (response.ok) {
+                    alert("Contact deleted.");
+                    loadContacts(); // refresh list after deleting
+                } else {
+                    const errorText = await response.text();
+                    alert("Error deleting contact: " + errorText);
+                }
+            } catch (err) {
+                console.error("Network error:", err);
+                alert("Server connection error.");
+            }
+        }
+
+        loadContacts();
+    </script>
 </body>
 </html>
