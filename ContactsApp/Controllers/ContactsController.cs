@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using BCrypt.Net;
 
 namespace ContactsApp.Controllers
 {
@@ -11,6 +12,7 @@ namespace ContactsApp.Controllers
     {
         private readonly AppDbContext _context;
 
+        // dependency injection
         public ContactsController(AppDbContext context) => _context = context;
 
         // contacts list view - available to everyone
@@ -41,6 +43,12 @@ namespace ContactsApp.Controllers
             {
                 // return json
                 return BadRequest(new { message = "Email must be unique." });
+            }
+
+            // hashing password
+            if (!string.IsNullOrEmpty(contact.Password))
+            {
+                contact.Password = BCrypt.Net.BCrypt.EnhancedHashPassword(contact.Password, 12);
             }
 
             _context.Contacts.Add(contact);
